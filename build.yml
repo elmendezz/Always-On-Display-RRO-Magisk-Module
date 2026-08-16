@@ -1,0 +1,76 @@
+name: Build and Release Module
+
+on:
+  push:
+    branches: [ "main" ] # O 'master', dependiendo de tu rama por defecto
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Necesario para crear releases
+
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+        with:
+          # Necesitamos el historial completo para obtener el mensaje del commit
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }} # Token para poder hacer push
+
+      - name: Incrementar versión del módulo
+        id: module_info
+        run: |
+          # Extrae el 'id', 'version' y 'versionCode' de module.prop usando grep y cut
+          MODULE_ID=$(grep '^id=' module.prop | cut -d'=' -f2)
+          OLD_VERSION=$(grep '^version=' module.prop | cut -d'=' -f2)
+          OLD_VERSION_CODE=$(grep '^versionCode=' module.prop | cut -d'=' -f2)
+
+          # Incrementa el versionCode
+          NEW_VERSION_CODE=$((OLD_VERSION_CODE + 1))
+
+          # Incrementa la versión (ej: v1.1 -> v1.2)
+          BASE_VERSION=$(echo "$OLD_VERSION" | cut -d'.' -f1)
+          MINOR_VERSION=$(echo "$OLD_VERSION" | cut -d'.' -f2)
+          NEW_MINOR_VERSION=$((MINOR_VERSION + 1))
+          NEW_VERSION="${BASE_VERSION}.${NEW_MINOR_VERSION}"
+
+          # Actualiza el archivo module.prop
+          sed -i "s/^version=.*/version=$NEW_VERSION/" module.prop
+          sed -i "s/^versionCode=.*/versionCode=$NEW_VERSION_CODE/" module.prop
+          
+          # Genera el nombre del zip con la nueva versión
+          ZIP_FILENAME="${MODULE_ID}-${NEW_VERSION}.zip"
+          echo "zip_name=${ZIP_FILENAME}" >> $GITHUB_OUTPUT
+          echo "new_version=${NEW_VERSION}" >> $GITHUB_OUTPUT
+          
+          # Obtiene el mensaje del último commit para el cuerpo de la release
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          echo "commit_message<<EOF" >> $GITHUB_ENV
+          echo "$COMMIT_MSG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Hacer commit de la nueva versión
+        # Solo se ejecuta si el último commit no es del bot
+        if: "!contains(github.event.head_commit.message, 'ci: Version bump')"
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add module.prop
+          git commit -m "ci: Version bump to ${{ steps.module_info.outputs.new_version }}"
+          git push
+
+      - name: Crear el archivo Zip del módulo
+        run: zip -r9 ${{ steps.module_info.outputs.zip_name }} . -x ".git/*" ".github/*" "README.md"
+
+      - name: Crear Release en GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          # El cuerpo de la release será el mensaje del último commit
+          body: ${{ env.commit_message }}
+          # El nombre de la release será la nueva versión
+          name: Release ${{ steps.module_info.outputs.new_version }}
+          tag_name: ${{ steps.module_info.outputs.new_version }}
+          files: ${{ steps.module_info.outputs.zip_name }}
+          # Genera la release como un borrador (draft) para que puedas revisarla
+          draft: false # Cambiado a false para publicar automáticamente

@@ -1,0 +1,50 @@
+name: Build and Release Module
+
+on:
+  push:
+    branches:
+      - main # O 'master', dependiendo de tu rama por defecto
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Necesario para crear releases
+
+    steps:
+      - name: Checkout del código
+        uses: actions/checkout@v4
+        with:
+          # Necesitamos el historial completo para obtener el mensaje del commit
+          fetch-depth: 0
+
+      - name: Obtener información del módulo y commit
+        id: module_info
+        run: |
+          # Extrae el 'id' y 'version' de module.prop
+          MODULE_ID=$(grep_prop id module.prop)
+          MODULE_VERSION=$(grep_prop version module.prop)
+          
+          # Genera un nombre de archivo único para el zip
+          ZIP_FILENAME="${MODULE_ID}-${MODULE_VERSION}-$(date +%Y%m%d%H%M%S).zip"
+          echo "zip_name=${ZIP_FILENAME}" >> $GITHUB_OUTPUT
+          
+          # Obtiene el mensaje del último commit para el cuerpo de la release
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          echo "commit_message<<EOF" >> $GITHUB_ENV
+          echo "$COMMIT_MSG" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      - name: Crear el archivo Zip del módulo
+        run: zip -r9 ${{ steps.module_info.outputs.zip_name }} . -x ".git/*" ".github/*" "README.md"
+
+      - name: Crear Release en GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          # El cuerpo de la release será el mensaje del último commit
+          body: ${{ env.commit_message }}
+          # Usa el nombre del zip como nombre de la release
+          name: ${{ steps.module_info.outputs.zip_name }}
+          files: ${{ steps.module_info.outputs.zip_name }}
+          # Genera la release como un borrador (draft) para que puedas revisarla
+          draft: true

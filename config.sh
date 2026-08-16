@@ -41,7 +41,7 @@ LATESTARTSERVICE=false
 
 print_modname() {
   ui_print "*******************************"
-  ui_print "   Always On Display Installer By Elmendezz  "
+  ui_print "   Always On Display Installer By elmendezz  "
   ui_print "*******************************"
 }
 

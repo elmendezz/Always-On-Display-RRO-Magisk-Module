@@ -53,7 +53,7 @@ Este módulo es compatible con Android P y versiones superiores.
 ## Créditos / Credits
 
 **elmendez**  
-[Instagram](https://www.instagram.com/_elmendez__)
+[Instagram](https://www.instagram.com/mendez.lnk)
 
 ---
 
